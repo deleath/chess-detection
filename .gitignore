@@ -1,0 +1,22 @@
+# Датасеты
+chessred_data/
+chessred2k_yolo/
+chessred2k_yolo_singleclass/
+chessred2k_classifier/
+
+# Результаты обучения
+runs/
+
+# Скачанные видео
+*.mp4
+*.avi
+
+# venv и Python
+venv/
+__pycache__/
+*.pyc
+
+# Логи nohup
+*.log
+end-to-end-chess-recognition-nobbox/
+*.pt
