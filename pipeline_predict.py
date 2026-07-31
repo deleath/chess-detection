@@ -2,8 +2,8 @@ import cv2
 from ultralytics import YOLO
 import sys
 
-DETECTOR_PATH = "runs/detect/runs/detector_v1_singleclass/weights/best.pt"
-CLASSIFIER_PATH = "runs/classify/runs/classifier_v1-2/weights/best.pt"
+DETECTOR_PATH = "runs/detect/runs/detector_v3_yolo11m/weights/best.pt"
+CLASSIFIER_PATH = "runs/classify/runs/classifier_v2_yolo11m/weights/best.pt"
 
 detector = YOLO(DETECTOR_PATH)
 classifier = YOLO(CLASSIFIER_PATH)
