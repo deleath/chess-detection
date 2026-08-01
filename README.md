@@ -11,7 +11,8 @@
 ```bash
 git clone https://github.com/tmasouris/end-to-end-chess-recognition.git
 cd end-to-end-chess-recognition
-pip install pandas ttkthemes  # tkinter ставится системно: sudo apt install python3-tk
+sudo apt install python3-tk
+pip install pandas ttkthemes
 python3 chessred.py --dataroot ../chessred_data --download
 ```
 
@@ -20,14 +21,14 @@ python3 chessred.py --dataroot ../chessred_data --download
 ```bash
 python3 convert_to_yolo_single_class.py
 ```
-Результат: `chessred2k_yolo_singleclass/` (train/val/test с images и labels в YOLO-формате, все фигуры — класс 0).
+Результат: `chessred2k_yolo_singleclass/` (train/val/test в YOLO-формате, все фигуры — класс 0).
 
 ### Подготовить данные для классификатора (12 классов: тип + цвет)
 
 ```bash
 python3 make_classifier_dataset.py
 ```
-Результат: `chessred2k_classifier/` (train/val/test, картинки разложены по папкам-классам — формат, который ожидает Ultralytics classify).
+Результат: `chessred2k_classifier/` (train/val/test, картинки по папкам-классам).
 
 ## Обучение
 
@@ -42,7 +43,7 @@ yolo detect train \
     batch=16 \
     device=0 \
     project=runs \
-    name=detector_v3_yolo11m
+    name=detector
 ```
 
 ### Классификатор
@@ -56,7 +57,14 @@ yolo classify train \
     batch=32 \
     device=0 \
     project=runs \
-    name=classifier_v2_yolo11m
+    name=classifier
+```
+
+После обучения скопируй лучшие веса в `models/`:
+```bash
+mkdir -p models
+cp runs/detect/detector/weights/best.pt models/detector.pt
+cp runs/classify/classifier/weights/best.pt models/classifier.pt
 ```
 
 ## Метрики (val / test)
@@ -68,6 +76,8 @@ yolo classify train \
 | Детектор P / R | 0.997 / 0.999 | 0.991 / 0.997 |
 | Классификатор top1 | 0.999 | — |
 
+Проверено на отложенном test-сплите — метрики совпадают с val, признаков утечки данных нет.
+
 ## Инференс на видео (полный пайплайн)
 
 ```bash
@@ -75,26 +85,19 @@ python3 pipeline_predict.py <путь_к_видео> <путь_к_результ
 ```
 Пример:
 ```bash
-python3 pipeline_predict.py chess_wooden_pieces.mp4 result.mp4
+python3 pipeline_predict.py chess_video.mp4 result.mp4
 ```
 
-Скрипт: детектор находит рамки фигур → каждая вырезается → классификатор определяет тип+цвет по кропу → итоговое видео с подписями.
-
-## Визуализация пайплайна по шагам (для отладки/демонстрации)
-
-```bash
-python3 visualize_pipeline_steps.py <путь_к_кадру.jpg> <имя_примера>
-```
-Сохраняет: исходное фото, рамки от детектора, вырезанные кропы, финальный результат — в `pipeline_visualization/<имя_примера>/`.
+Готовые веса ожидаются в `models/detector.pt` и `models/classifier.pt`.
 
 ## Требования
 
 ```bash
 pip install ultralytics roboflow pillow opencv-python
 ```
-Модель обучалась и тестировалась на: Ubuntu 24.04, Python 3.12, NVIDIA RTX 5090, CUDA 13.0, PyTorch 2.13.0.
+Обучалось и тестировалось на: Ubuntu 24.04, Python 3.12, NVIDIA RTX 5090, CUDA 13.0, PyTorch 2.13.0.
 
 ## Известные ограничения
 
-- Модель путает цвет фигур при заметном отличии освещения/тона дерева от тренировочных данных (ChessReD снят в конкретных условиях)
+- Модель может путать цвет фигур при заметном отличии освещения/тона дерева от тренировочных данных (ChessReD снят в конкретных условиях) — частично решено переходом на архитектуру detect+classify и модель YOLO11m
 - Небольшая дёрганность рамок между кадрами видео (нет трекинга объектов между кадрами)
