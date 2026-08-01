@@ -95,9 +95,4 @@ python3 pipeline_predict.py chess_video.mp4 result.mp4
 ```bash
 pip install ultralytics roboflow pillow opencv-python
 ```
-Обучалось и тестировалось на: Ubuntu 24.04, Python 3.12, NVIDIA RTX 5090, CUDA 13.0, PyTorch 2.13.0.
 
-## Известные ограничения
-
-- Модель может путать цвет фигур при заметном отличии освещения/тона дерева от тренировочных данных (ChessReD снят в конкретных условиях) — частично решено переходом на архитектуру detect+classify и модель YOLO11m
-- Небольшая дёрганность рамок между кадрами видео (нет трекинга объектов между кадрами)
