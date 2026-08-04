@@ -20,3 +20,4 @@ __pycache__/
 *.log
 end-to-end-chess-recognition-nobbox/
 *.pt
+*.svg
