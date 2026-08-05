@@ -104,25 +104,13 @@ def process_video_stream(video_path, corners=None, initial_board=None,
                           conf_threshold_frames=3, calibrate_if_missing=True,
                           verbose=True):
     """
-    Обрабатывает видео целиком: покадрово детектирует состояние доски,
-    сглаживает через голосование (StableBoardDetector) против дёрганья/
-    ложных срабатываний, проверяет физическую валидность (sanity_check)
-    и при каждом устойчивом изменении пытается определить и
-    провалидировать ход через infer_move().
+    Покадрово детектирует доску, сглаживает через StableBoardDetector,
+    проверяет sanity_check и валидирует ход через infer_move().
 
-    corners — углы доски в формате board_corners.py. Камера роборуки
-    физически зафиксирована на весь сеанс, поэтому калибровка углов
-    выполняется один раз (по первому кадру, либо заранее сохранённая
-    camera_calibration.json), а не на каждом кадре:
-      1. Если corners передан явно — используется он.
-      2. Иначе пробуем camera_calibration.json (load_calibration()).
-      3. Иначе, если calibrate_if_missing=True — автокалибровка по
-         первому кадру видео (board_corners.calibrate(), без ручного
-         fallback — на сервере нет GUI-дисплея для клика по кадру).
+    corners: если None — берётся из camera_calibration.json, иначе
+    автокалибровка по первому кадру (calibrate_if_missing=True).
 
-    Возвращает (confirmed_moves, board):
-      confirmed_moves — список подтверждённых ходов в порядке появления
-      board — итоговая позиция chess.Board после всех ходов
+    Возвращает (confirmed_moves, board).
     """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():

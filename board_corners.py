@@ -1,24 +1,9 @@
 """
-board_corners.py
+Углы доски на кадре для гомографии (pixel -> клетка a1-h8).
+Автодетект по внешнему контуру, ручной клик как fallback.
 
-Определение углов шахматной доски на кадре для построения гомографии
-(pixel -> клетка a1-h8), см. pixel_to_square() в full_pipeline.py /
-homography_test.py.
-
-Используется в двух сценариях:
-1. Разовая калибровка при старте сессии с камерой роборуки. Камера
-   закреплена физически и не двигается во время партии, поэтому углы
-   достаточно определить один раз (на первом кадре) и переиспользовать
-   для всех последующих кадров — см. process_video_stream() в
-   full_pipeline.py.
-2. Резервный вариант — если автодетект не справился (плохой контраст,
-   доска частично перекрыта рукой/фигурами), углы можно задать вручную
-   кликом по кадру (нужен доступный дисплей, не работает по SSH без X11).
-
-Формат corners — совместим с detect_board_state()/process_turn() из
-full_pipeline.py и разметкой ChessReD:
-    {"top_left": [x, y], "top_right": [x, y],
-     "bottom_right": [x, y], "bottom_left": [x, y]}
+corners: {"top_left": [x,y], "top_right": [x,y],
+          "bottom_right": [x,y], "bottom_left": [x,y]}
 """
 import json
 import sys
@@ -33,12 +18,7 @@ _LABELS = ["top_left", "top_right", "bottom_right", "bottom_left"]
 
 
 def _order_corners(pts: np.ndarray) -> np.ndarray:
-    """
-    Приводит 4 произвольно упорядоченные точки контура к порядку
-    [top_left, top_right, bottom_right, bottom_left] по сумме/разности
-    координат — стандартный приём для приведения углов четырёхугольника
-    к каноническому порядку без знания, с какой вершины начался контур.
-    """
+    """4 точки контура -> [top_left, top_right, bottom_right, bottom_left]."""
     pts = pts.reshape(4, 2).astype(np.float32)
     ordered = np.zeros((4, 2), dtype=np.float32)
 
@@ -55,15 +35,8 @@ def _order_corners(pts: np.ndarray) -> np.ndarray:
 
 def detect_corners_auto(frame, min_area_ratio=0.15, debug_path=None):
     """
-    Пытается автоматически найти 4 угла доски по её внешнему контуру.
-
-    В отличие от cv2.findChessboardCorners (которому нужна полностью
-    пустая доска с чистым чёрно-белым паттерном), здесь ищется рамка/
-    край самой доски — она остаётся отчётливым прямоугольным контуром
-    даже когда на клетках стоят фигуры.
-
-    Возвращает dict {"top_left": [x,y], ...} или None, если не нашёл
-    достаточно уверенного кандидата.
+    Ищет 4 угла доски по внешнему контуру (не findChessboardCorners —
+    той нужна пустая доска). Возвращает dict или None.
     """
     h, w = frame.shape[:2]
     frame_area = h * w
@@ -90,9 +63,7 @@ def detect_corners_auto(frame, min_area_ratio=0.15, debug_path=None):
     if not candidates:
         return None
 
-    # Берём самый крупный подходящий четырёхугольник — предполагаем, что
-    # доска доминирует в кадре (типично для камеры роборуки, смотрящей
-    # почти вертикально вниз на доску с фиксированного расстояния).
+    # берём самый крупный подходящий четырёхугольник
     candidates.sort(key=lambda c: c[0], reverse=True)
     _, best_approx = candidates[0]
 
@@ -112,14 +83,7 @@ def detect_corners_auto(frame, min_area_ratio=0.15, debug_path=None):
 
 
 def detect_corners_manual(frame, window_name="Кликните 4 угла доски: TL, TR, BR, BL, затем любую клавишу"):
-    """
-    Интерактивный резервный вариант — пользователь кликает 4 угла доски
-    в порядке top_left, top_right, bottom_right, bottom_left.
-
-    Требует доступного GUI-дисплея (не работает на headless SSH-сессии
-    без X11 форвардинга) — предназначен для запуска на машине, физически
-    подключённой к камере роборуки во время калибровки.
-    """
+    """Клик по 4 углам доски. Нужен дисплей, по SSH без X11 не работает."""
     points = []
 
     def on_click(event, x, y, flags, param):
@@ -158,15 +122,7 @@ def load_calibration(path: Path = CALIBRATION_PATH):
 
 
 def calibrate(frame, allow_manual_fallback=True, save=True, debug_path=None):
-    """
-    Единая точка входа для калибровки при старте сессии:
-    1. Пробует автодетект по внешнему контуру доски.
-    2. Если не получилось и разрешён ручной ввод — просит кликнуть углы
-       (нужен GUI, недоступно на headless SSH-сессии).
-    3. Сохраняет результат в camera_calibration.json для переиспользования
-       на всех последующих кадрах этой сессии — см. process_video_stream()
-       в full_pipeline.py, где камера считается физически неподвижной.
-    """
+    """Автодетект -> ручной клик как fallback -> сохранить в camera_calibration.json."""
     corners = detect_corners_auto(frame, debug_path=debug_path)
 
     if corners is None and allow_manual_fallback:
