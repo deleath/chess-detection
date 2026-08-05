@@ -6,6 +6,8 @@ import chess.svg
 from pathlib import Path
 from ultralytics import YOLO
 from board_state import PIECE_TO_SYMBOL, infer_move, board_to_state
+from stable_detector import StableBoardDetector, sanity_check
+from board_corners import calibrate, load_calibration
 
 DETECTOR_PATH = "models/detector.pt"
 CLASSIFIER_PATH = "models/classifier.pt"
@@ -25,13 +27,16 @@ def pixel_to_square(x, y, H):
     rows = "87654321"
     return f"{cols[col]}{rows[row]}"
 
-def detect_board_state(frame, corners):
+def corners_to_homography(corners):
     src_points = np.array([
         corners['top_left'], corners['top_right'],
         corners['bottom_right'], corners['bottom_left']
     ], dtype=np.float32)
     dst_points = np.array([[0,0],[BOARD_SIZE,0],[BOARD_SIZE,BOARD_SIZE],[0,BOARD_SIZE]], dtype=np.float32)
-    H = cv2.getPerspectiveTransform(src_points, dst_points)
+    return cv2.getPerspectiveTransform(src_points, dst_points)
+
+def detect_board_state(frame, corners):
+    H = corners_to_homography(corners)
 
     det_results = detector.predict(frame, conf=0.5, verbose=False)[0]
     square_to_piece = {}
@@ -78,6 +83,108 @@ def render_board_2d(board: chess.Board, output_path="current_position.svg"):
         f.write(svg_board)
     print(f"2D-позиция сохранена: {output_path}")
 
+def run_sequence(image_ids):
+    DATAROOT = Path("chessred_data")
+    with open(DATAROOT / "annotations.json") as f:
+        data = json.load(f)
+
+    images_by_id = {img['id']: img for img in data['images']}
+    corners_by_image = {c['image_id']: c['corners'] for c in data['annotations']['corners']}
+
+    board = chess.Board()
+    for img_id in image_ids:
+        img_info = images_by_id[img_id]
+        frame = cv2.imread(str(DATAROOT / img_info['path']))
+        corners = corners_by_image[img_id]
+
+        result, board = process_turn(board, frame, corners)
+        print(f"image_id={img_id}: статус={result['status']}, ход={result['move']}, {result['message']}")
+
+def process_video_stream(video_path, corners=None, initial_board=None,
+                          conf_threshold_frames=3, calibrate_if_missing=True,
+                          verbose=True):
+    """
+    Обрабатывает видео целиком: покадрово детектирует состояние доски,
+    сглаживает через голосование (StableBoardDetector) против дёрганья/
+    ложных срабатываний, проверяет физическую валидность (sanity_check)
+    и при каждом устойчивом изменении пытается определить и
+    провалидировать ход через infer_move().
+
+    corners — углы доски в формате board_corners.py. Камера роборуки
+    физически зафиксирована на весь сеанс, поэтому калибровка углов
+    выполняется один раз (по первому кадру, либо заранее сохранённая
+    camera_calibration.json), а не на каждом кадре:
+      1. Если corners передан явно — используется он.
+      2. Иначе пробуем camera_calibration.json (load_calibration()).
+      3. Иначе, если calibrate_if_missing=True — автокалибровка по
+         первому кадру видео (board_corners.calibrate(), без ручного
+         fallback — на сервере нет GUI-дисплея для клика по кадру).
+
+    Возвращает (confirmed_moves, board):
+      confirmed_moves — список подтверждённых ходов в порядке появления
+      board — итоговая позиция chess.Board после всех ходов
+    """
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise RuntimeError(f"Не удалось открыть видео: {video_path}")
+
+    board = initial_board if initial_board else chess.Board()
+    stabilizer = StableBoardDetector(history_size=5, min_agreement=conf_threshold_frames)
+
+    if corners is None:
+        corners = load_calibration()
+
+    if corners is None:
+        if not calibrate_if_missing:
+            cap.release()
+            raise RuntimeError(
+                "Углы доски не заданы и calibrate_if_missing=False. "
+                "Передайте corners явно или запустите board_corners.calibrate() заранее."
+            )
+        ok, first_frame = cap.read()
+        if not ok:
+            cap.release()
+            raise RuntimeError("Видео пустое — не удалось прочитать первый кадр для калибровки")
+        corners = calibrate(first_frame, allow_manual_fallback=False, save=True)
+        # Перечитываем видео с начала, чтобы не потерять уже прочитанный первый кадр.
+        cap.release()
+        cap = cv2.VideoCapture(video_path)
+
+    confirmed_moves = []
+    frame_num = 0
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame_num += 1
+
+        raw_state = detect_board_state(frame, corners)
+        stable_state = stabilizer.update(raw_state)
+
+        issues = sanity_check(stable_state)
+        if issues:
+            if verbose:
+                print(f"Кадр {frame_num}: проблема детекции — {issues}")
+            continue
+
+        move, status = infer_move(stable_state, board)
+
+        if status == "no_change":
+            continue
+        elif status == "valid":
+            board.push(move)
+            confirmed_moves.append(str(move))
+            if verbose:
+                print(f"Кадр {frame_num}: ход принят — {move} (FEN: {board.fen()})")
+        else:  # invalid
+            if verbose:
+                print(f"Кадр {frame_num}: НЕВАЛИДНЫЙ ХОД — верните фигуру на место "
+                      f"(увидено: {stable_state})")
+
+    cap.release()
+    return confirmed_moves, board
+
 if __name__ == "__main__":
     DATAROOT = Path("chessred_data")
     with open(DATAROOT / "annotations.json") as f:
@@ -100,63 +207,3 @@ if __name__ == "__main__":
     print("FEN:", result["fen"])
 
     render_board_2d(board)
-
-def run_sequence(image_ids):
-    DATAROOT = Path("chessred_data")
-    with open(DATAROOT / "annotations.json") as f:
-        data = json.load(f)
-
-    images_by_id = {img['id']: img for img in data['images']}
-    corners_by_image = {c['image_id']: c['corners'] for c in data['annotations']['corners']}
-
-    board = chess.Board()
-    for img_id in image_ids:
-        img_info = images_by_id[img_id]
-        frame = cv2.imread(str(DATAROOT / img_info['path']))
-        corners = corners_by_image[img_id]
-
-        result, board = process_turn(board, frame, corners)
-        print(f"image_id={img_id}: статус={result['status']}, ход={result['move']}, {result['message']}")
-
-from stable_detector import StableBoardDetector, sanity_check
-
-def process_video_stream(video_path, initial_board=None, conf_threshold_frames=3):
-    """
-    Обрабатывает видео целиком: покадрово детектирует доску, сглаживает
-    через голосование, и при каждом стабильном изменении пытается
-    определить и провалидировать ход.
-    """
-    cap = cv2.VideoCapture(video_path)
-    board = initial_board if initial_board else chess.Board()
-    stabilizer = StableBoardDetector(history_size=5, min_agreement=conf_threshold_frames)
-
-    # ВАЖНО: для реального видео понадобятся corners с этого же видео,
-    # а не из датасета — пока для демонстрации нужен статичный вызов
-    # с заранее известными corners (например, откалиброванными вручную)
-
-    last_confirmed_state = board_to_state(board)
-    frame_num = 0
-
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frame_num += 1
-
-        # detect_board_state здесь потребует corners — заглушка,
-        # реальный вызов будет после калибровки камеры роборуки
-        # raw_state = detect_board_state(frame, corners)
-        # stable_state = stabilizer.update(raw_state)
-
-        # issues = sanity_check(stable_state)
-        # if issues:
-        #     print(f"Кадр {frame_num}: проблема детекции — {issues}")
-        #     continue
-
-        # if stable_state != last_confirmed_state:
-        #     move, status = infer_move(stable_state, board)
-        #     ...
-
-        pass  # заглушка до появления реальной камеры/corners
-
-    cap.release()
