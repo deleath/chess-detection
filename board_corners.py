@@ -1,6 +1,6 @@
 """
-Углы доски на кадре для гомографии (pixel -> клетка a1-h8).
-Автодетект по внешнему контуру, ручной клик как fallback.
+Поиск углов доски на кадре для гомографии (pixel -> клетка a1-h8).
+Сначала автодетект по внешнему контуру, при неудаче — ручной клик.
 
 corners: {"top_left": [x,y], "top_right": [x,y],
           "bottom_right": [x,y], "bottom_left": [x,y]}
@@ -18,7 +18,7 @@ _LABELS = ["top_left", "top_right", "bottom_right", "bottom_left"]
 
 
 def _order_corners(pts: np.ndarray) -> np.ndarray:
-    """4 точки контура -> [top_left, top_right, bottom_right, bottom_left]."""
+    """Раскладывает 4 точки контура в порядок [top_left, top_right, bottom_right, bottom_left]."""
     pts = pts.reshape(4, 2).astype(np.float32)
     ordered = np.zeros((4, 2), dtype=np.float32)
 
@@ -35,8 +35,8 @@ def _order_corners(pts: np.ndarray) -> np.ndarray:
 
 def detect_corners_auto(frame, min_area_ratio=0.15, debug_path=None):
     """
-    Ищет 4 угла доски по внешнему контуру (не findChessboardCorners —
-    той нужна пустая доска). Возвращает dict или None.
+    Находит 4 угла доски по внешнему контуру — в отличие от
+    findChessboardCorners, не требует пустой доски. Возвращает dict или None.
     """
     h, w = frame.shape[:2]
     frame_area = h * w
@@ -63,7 +63,7 @@ def detect_corners_auto(frame, min_area_ratio=0.15, debug_path=None):
     if not candidates:
         return None
 
-    # берём самый крупный подходящий четырёхугольник
+    # из подходящих четырёхугольников берём самый крупный по площади
     candidates.sort(key=lambda c: c[0], reverse=True)
     _, best_approx = candidates[0]
 
@@ -83,7 +83,7 @@ def detect_corners_auto(frame, min_area_ratio=0.15, debug_path=None):
 
 
 def detect_corners_manual(frame, window_name="Кликните 4 угла доски: TL, TR, BR, BL, затем любую клавишу"):
-    """Клик по 4 углам доски. Нужен дисплей, по SSH без X11 не работает."""
+    """Ручной клик по 4 углам доски. Требует дисплей — по SSH без X11 не запустится."""
     points = []
 
     def on_click(event, x, y, flags, param):
@@ -122,7 +122,7 @@ def load_calibration(path: Path = CALIBRATION_PATH):
 
 
 def calibrate(frame, allow_manual_fallback=True, save=True, debug_path=None):
-    """Автодетект -> ручной клик как fallback -> сохранить в camera_calibration.json."""
+    """Пробует автодетект, при неудаче — ручной клик, результат пишет в camera_calibration.json."""
     corners = detect_corners_auto(frame, debug_path=debug_path)
 
     if corners is None and allow_manual_fallback:

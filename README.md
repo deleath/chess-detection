@@ -1,6 +1,6 @@
 # chess-detection
 
-Детектор + классификатор шахматных фигур (YOLO11).
+Пайплайн детекции и классификации шахматных фигур на базе YOLO11.
 
 ## Датасет
 
@@ -43,7 +43,7 @@ cp runs/classify/classifier/weights/best.pt models/classifier.pt
 python3 pipeline_predict.py <видео> <результат>
 ```
 
-Полный пайплайн (нотация, валидация хода, антидёрганье):
+Полный цикл — с нотацией, валидацией хода и сглаживанием детекции:
 
 ```python
 from full_pipeline import process_video_stream

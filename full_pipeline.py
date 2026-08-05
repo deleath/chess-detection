@@ -104,11 +104,12 @@ def process_video_stream(video_path, corners=None, initial_board=None,
                           conf_threshold_frames=3, calibrate_if_missing=True,
                           verbose=True):
     """
-    Покадрово детектирует доску, сглаживает через StableBoardDetector,
-    проверяет sanity_check и валидирует ход через infer_move().
+    Покадрово детектирует состояние доски, сглаживает через
+    StableBoardDetector, прогоняет через sanity_check и определяет ход
+    через infer_move().
 
-    corners: если None — берётся из camera_calibration.json, иначе
-    автокалибровка по первому кадру (calibrate_if_missing=True).
+    corners: если не передан, берётся из camera_calibration.json, а если
+    и его нет — калибруется по первому кадру (calibrate_if_missing=True).
 
     Возвращает (confirmed_moves, board).
     """
