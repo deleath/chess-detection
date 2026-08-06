@@ -33,9 +33,11 @@ yolo classify train \
 
 ```bash
 mkdir -p models
-cp runs/detect/detector/weights/best.pt models/detector.pt
-cp runs/classify/classifier/weights/best.pt models/classifier.pt
+cp runs/detect/runs/detector/weights/best.pt models/detector.pt
+cp runs/classify/runs/classifier/weights/best.pt models/classifier.pt
 ```
+
+(ultralytics с `project=runs` сам добавляет `detect/`/`classify/` перед именем проекта — отсюда двойное `runs`, это не опечатка)
 
 ## Готовые веса
 
@@ -63,5 +65,5 @@ moves, board = process_video_stream("game.mp4")
 ## Требования
 
 ```bash
-pip install ultralytics roboflow pillow opencv-python python-chess
+pip install ultralytics numpy pillow opencv-python chess
 ```
