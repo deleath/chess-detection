@@ -37,6 +37,16 @@ cp runs/detect/detector/weights/best.pt models/detector.pt
 cp runs/classify/classifier/weights/best.pt models/classifier.pt
 ```
 
+## Готовые веса
+
+Без обучения — веса лежат в [релизе v1.0-models](https://github.com/deleath/chess-detection/releases/tag/v1.0-models):
+
+```bash
+mkdir -p models
+curl -L -o models/detector.pt https://github.com/deleath/chess-detection/releases/download/v1.0-models/detector.pt
+curl -L -o models/classifier.pt https://github.com/deleath/chess-detection/releases/download/v1.0-models/classifier.pt
+```
+
 ## Инференс
 
 ```bash
