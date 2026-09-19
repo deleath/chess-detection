@@ -23,3 +23,8 @@ end-to-end-chess-recognition-nobbox/
 *.svg
 chessred2k_corners/
 reconstructed_part*.jsonl
+chessred_expanded_det/
+chessred_expanded_cls/
+cmp_*.jpg
+ood_done.flag
+run_ood.out
