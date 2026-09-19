@@ -21,3 +21,5 @@ __pycache__/
 end-to-end-chess-recognition-nobbox/
 *.pt
 *.svg
+chessred2k_corners/
+reconstructed_part*.jsonl
