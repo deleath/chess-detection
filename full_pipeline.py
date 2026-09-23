@@ -5,6 +5,7 @@ import chess
 import chess.svg
 from pathlib import Path
 from ultralytics import YOLO
+from loguru import logger
 from board_state import PIECE_TO_SYMBOL, infer_move, board_to_state
 from stable_detector import StableBoardDetector, sanity_check
 from board_corners import calibrate, load_calibration
@@ -50,6 +51,8 @@ def detect_board_state(frame, corners):
         cls_results = classifier.predict(crop, verbose=False)[0]
         label = cls_results.names[cls_results.probs.top1]
 
+        # TODO: на части наборов фигур путает тип у короля/ферзя (см. demo_render_2d.py) —
+        # цвет отдельно чинили дообучением, тип пока нет
         cx, cy = (x1 + x2) / 2, y2
         square = pixel_to_square(cx, cy, H)
         square_to_piece[square] = label
@@ -81,7 +84,7 @@ def render_board_2d(board: chess.Board, output_path="current_position.svg"):
     svg_board = chess.svg.board(board=board, size=400)
     with open(output_path, "w") as f:
         f.write(svg_board)
-    print(f"2D-позиция сохранена: {output_path}")
+    logger.info(f"2D-позиция сохранена: {output_path}")
 
 def run_sequence(image_ids):
     DATAROOT = Path("chessred_data")
@@ -98,20 +101,15 @@ def run_sequence(image_ids):
         corners = corners_by_image[img_id]
 
         result, board = process_turn(board, frame, corners)
-        print(f"image_id={img_id}: статус={result['status']}, ход={result['move']}, {result['message']}")
+        logger.info(f"image_id={img_id}: статус={result['status']}, ход={result['move']}, {result['message']}")
 
 def process_video_stream(video_path, corners=None, initial_board=None,
                           conf_threshold_frames=3, calibrate_if_missing=True,
                           verbose=True):
     """
-    Покадрово детектирует состояние доски, сглаживает через
-    StableBoardDetector, прогоняет через sanity_check и определяет ход
-    через infer_move().
-
-    corners: если не передан, берётся из camera_calibration.json, а если
-    и его нет — калибруется по первому кадру (calibrate_if_missing=True).
-
-    Возвращает (confirmed_moves, board).
+    Гоняет по кадрам: detect_board_state -> StableBoardDetector -> sanity_check
+    -> infer_move. corners без явной передачи берутся из camera_calibration.json,
+    а если и его нет — калибруется по первому кадру.
     """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -135,7 +133,7 @@ def process_video_stream(video_path, corners=None, initial_board=None,
             cap.release()
             raise RuntimeError("Видео пустое — не удалось прочитать первый кадр для калибровки")
         corners = calibrate(first_frame, allow_manual_fallback=False, save=True)
-        # Перечитываем видео с начала, чтобы не потерять уже прочитанный первый кадр.
+        # перечитываем видео с начала, иначе потеряем уже прочитанный первый кадр
         cap.release()
         cap = cv2.VideoCapture(video_path)
 
@@ -154,7 +152,7 @@ def process_video_stream(video_path, corners=None, initial_board=None,
         issues = sanity_check(stable_state)
         if issues:
             if verbose:
-                print(f"Кадр {frame_num}: проблема детекции — {issues}")
+                logger.warning(f"Кадр {frame_num}: проблема детекции — {issues}")
             continue
 
         move, status = infer_move(stable_state, board)
@@ -165,11 +163,11 @@ def process_video_stream(video_path, corners=None, initial_board=None,
             board.push(move)
             confirmed_moves.append(str(move))
             if verbose:
-                print(f"Кадр {frame_num}: ход принят — {move} (FEN: {board.fen()})")
+                logger.success(f"Кадр {frame_num}: ход принят — {move} (FEN: {board.fen()})")
         else:  # invalid
             if verbose:
-                print(f"Кадр {frame_num}: НЕВАЛИДНЫЙ ХОД — верните фигуру на место "
-                      f"(увидено: {stable_state})")
+                logger.warning(f"Кадр {frame_num}: НЕВАЛИДНЫЙ ХОД — верните фигуру на место "
+                                f"(увидено: {stable_state})")
 
     cap.release()
     return confirmed_moves, board
@@ -190,9 +188,9 @@ if __name__ == "__main__":
     board = chess.Board()
     result, board = process_turn(board, frame, corners)
 
-    print("Статус:", result["status"])
-    print("Ход:", result["move"])
-    print("Сообщение:", result["message"])
-    print("FEN:", result["fen"])
+    logger.info(f"Статус: {result['status']}")
+    logger.info(f"Ход: {result['move']}")
+    logger.info(f"Сообщение: {result['message']}")
+    logger.info(f"FEN: {result['fen']}")
 
     render_board_2d(board)

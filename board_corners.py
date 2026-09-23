@@ -1,6 +1,6 @@
 """
-Поиск углов доски на кадре для гомографии (pixel -> клетка a1-h8).
-Сначала автодетект по внешнему контуру, при неудаче — ручной клик.
+Углы доски на кадре для гомографии (pixel -> клетка a1-h8).
+Автодетект по внешнему контуру, ручной клик как fallback.
 
 corners: {"top_left": [x,y], "top_right": [x,y],
           "bottom_right": [x,y], "bottom_left": [x,y]}
@@ -11,6 +11,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from loguru import logger
 
 CALIBRATION_PATH = Path("camera_calibration.json")
 
@@ -18,7 +19,7 @@ _LABELS = ["top_left", "top_right", "bottom_right", "bottom_left"]
 
 
 def _order_corners(pts: np.ndarray) -> np.ndarray:
-    """Раскладывает 4 точки контура в порядок [top_left, top_right, bottom_right, bottom_left]."""
+    """4 точки контура -> [top_left, top_right, bottom_right, bottom_left]."""
     pts = pts.reshape(4, 2).astype(np.float32)
     ordered = np.zeros((4, 2), dtype=np.float32)
 
@@ -34,10 +35,8 @@ def _order_corners(pts: np.ndarray) -> np.ndarray:
 
 
 def detect_corners_auto(frame, min_area_ratio=0.15, debug_path=None):
-    """
-    Находит 4 угла доски по внешнему контуру — в отличие от
-    findChessboardCorners, не требует пустой доски. Возвращает dict или None.
-    """
+    """Ищет 4 угла доски по внешнему контуру. Не путать с findChessboardCorners —
+    той нужна пустая доска, здесь фигуры на клетках не мешают."""
     h, w = frame.shape[:2]
     frame_area = h * w
 
@@ -63,7 +62,7 @@ def detect_corners_auto(frame, min_area_ratio=0.15, debug_path=None):
     if not candidates:
         return None
 
-    # из подходящих четырёхугольников берём самый крупный по площади
+    # берём самый крупный подходящий четырёхугольник
     candidates.sort(key=lambda c: c[0], reverse=True)
     _, best_approx = candidates[0]
 
@@ -81,9 +80,12 @@ def detect_corners_auto(frame, min_area_ratio=0.15, debug_path=None):
 
     return {label: ordered[i].tolist() for i, label in enumerate(_LABELS)}
 
+    # пробовал ещё текстурную сегментацию (Laplacian) и Hough-линии —
+    # на захламлённых сценах (часы, рука в кадре) хуже, чем просто контур
+
 
 def detect_corners_manual(frame, window_name="Кликните 4 угла доски: TL, TR, BR, BL, затем любую клавишу"):
-    """Ручной клик по 4 углам доски. Требует дисплей — по SSH без X11 не запустится."""
+    """Клик по 4 углам доски руками. Нужен дисплей, по SSH без X11 не запустится."""
     points = []
 
     def on_click(event, x, y, flags, param):
@@ -101,7 +103,7 @@ def detect_corners_manual(frame, window_name="Кликните 4 угла дос
             cv2.putText(vis, _LABELS[i], (pt[0] + 8, pt[1]),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
         cv2.imshow(window_name, vis)
-        if cv2.waitKey(20) & 0xFF == 27:  # Esc — отмена калибровки
+        if cv2.waitKey(20) & 0xFF == 27:  # Esc — отмена
             cv2.destroyWindow(window_name)
             return None
 
@@ -122,11 +124,11 @@ def load_calibration(path: Path = CALIBRATION_PATH):
 
 
 def calibrate(frame, allow_manual_fallback=True, save=True, debug_path=None):
-    """Пробует автодетект, при неудаче — ручной клик, результат пишет в camera_calibration.json."""
+    """Автодетект -> ручной клик как fallback -> сохранить в camera_calibration.json."""
     corners = detect_corners_auto(frame, debug_path=debug_path)
 
     if corners is None and allow_manual_fallback:
-        print("Автодетект углов не сработал — переключаюсь на ручной выбор.")
+        logger.warning("Автодетект углов не сработал, переключаюсь на ручной выбор")
         corners = detect_corners_manual(frame)
 
     if corners is None:
@@ -138,7 +140,7 @@ def calibrate(frame, allow_manual_fallback=True, save=True, debug_path=None):
 
     if save:
         save_calibration(corners)
-        print(f"Калибровка сохранена: {CALIBRATION_PATH}")
+        logger.info(f"Калибровка сохранена: {CALIBRATION_PATH}")
 
     return corners
 
@@ -156,20 +158,19 @@ if __name__ == "__main__":
         ok, frame = cap.read()
         cap.release()
         if not ok:
-            print("Не удалось прочитать кадр из видео")
+            logger.error("Не удалось прочитать кадр из видео")
             sys.exit(1)
     else:
         frame = cv2.imread(src)
         if frame is None:
-            print("Не удалось прочитать изображение")
+            logger.error("Не удалось прочитать изображение")
             sys.exit(1)
 
     result = detect_corners_auto(frame, debug_path=debug_out)
     if result is None:
-        print("Автодетект не нашёл углы доски. Нужна ручная калибровка "
-              "(на машине с дисплеем) или другой кадр.")
+        logger.error("Автодетект не нашёл углы доски. Нужна ручная калибровка (на машине с дисплеем) или другой кадр.")
         sys.exit(1)
 
-    print("Найдены углы:")
+    logger.info("Найдены углы:")
     print(json.dumps(result, indent=2))
-    print(f"Отладочное изображение с разметкой: {debug_out}")
+    logger.info(f"Отладочное изображение с разметкой: {debug_out}")

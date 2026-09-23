@@ -1,19 +1,14 @@
 from collections import deque, Counter
+from loguru import logger
 
 class StableBoardDetector:
-    """
-    Обёртка над detect_board_state, которая сглаживает мерцания/дёрганья
-    между несколькими последовательными кадрами.
-    """
+    """Сглаживает мерцания/дёрганья детекции голосованием по последним N кадрам."""
     def __init__(self, history_size=5, min_agreement=3):
         self.history = deque(maxlen=history_size)
         self.min_agreement = min_agreement  # сколько раз подряд должно совпасть
 
     def update(self, raw_state: dict) -> dict:
-        """
-        raw_state — сырой результат detect_board_state() с одного кадра
-        Возвращает сглаженное, устойчивое состояние доски.
-        """
+        """raw_state - сырой результат detect_board_state() с одного кадра."""
         self.history.append(raw_state)
 
         all_squares = set()
@@ -52,13 +47,11 @@ if __name__ == "__main__":
 
     for i, frame_state in enumerate(frames):
         stable = detector.update(frame_state)
-        print(f"Кадр {i}: сырое={frame_state} -> устойчивое={stable}")
+        logger.info(f"Кадр {i}: сырое={frame_state} -> устойчивое={stable}")
 
 def sanity_check(state: dict) -> list:
-    """
-    Проверяет состояние доски на физическую валидность.
-    Возвращает список найденных проблем (пустой список = всё ок).
-    """
+    """Проверка на физическую валидность (не больше 32 фигур, по одному королю на цвет и т.п).
+    Возвращает список найденных проблем, пустой список — всё ок."""
     issues = []
 
     if len(state) > 32:

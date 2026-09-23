@@ -65,5 +65,5 @@ moves, board = process_video_stream("game.mp4")
 ## Требования
 
 ```bash
-pip install ultralytics numpy pillow opencv-python chess
+pip install ultralytics numpy pillow opencv-python chess loguru
 ```
