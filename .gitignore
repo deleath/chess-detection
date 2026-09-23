@@ -29,3 +29,4 @@ cmp_*.jpg
 ood_done.flag
 run_ood.out
 harvest/
+chessred_finetune_cls/
