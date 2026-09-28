@@ -10,6 +10,7 @@ from board_state import PIECE_TO_SYMBOL, infer_move, board_to_state
 from stable_detector import StableBoardDetector, sanity_check
 from board_corners import calibrate, load_calibration
 from crop_utils import square, CLS_IMGSZ
+from detection import detect_boxes
 
 DETECTOR_PATH = "models/detector.pt"
 CLASSIFIER_PATH = "models/classifier.pt"
@@ -40,11 +41,11 @@ def corners_to_homography(corners):
 def detect_board_state(frame, corners):
     H = corners_to_homography(corners)
 
-    det_results = detector.predict(frame, conf=0.5, verbose=False)[0]
+    boxes, _ = detect_boxes(detector, frame, conf=0.5)
     square_to_piece = {}
 
-    for box in det_results.boxes:
-        x1, y1, x2, y2 = map(int, box.xyxy[0])
+    for box in boxes:
+        x1, y1, x2, y2 = map(int, box)
         crop = frame[max(0,y1):y2, max(0,x1):x2]
         if crop.size == 0:
             continue
@@ -53,8 +54,8 @@ def detect_board_state(frame, corners):
         label = cls_results.names[cls_results.probs.top1]
 
         cx, cy = (x1 + x2) / 2, y2
-        square = pixel_to_square(cx, cy, H)
-        square_to_piece[square] = label
+        sq = pixel_to_square(cx, cy, H)
+        square_to_piece[sq] = label
 
     return square_to_piece
 

@@ -3,6 +3,7 @@ from ultralytics import YOLO
 from loguru import logger
 import sys
 from crop_utils import square, CLS_IMGSZ
+from detection import detect_boxes
 
 DETECTOR_PATH = "models/detector.pt"
 CLASSIFIER_PATH = "models/classifier.pt"
@@ -27,10 +28,10 @@ def process_video(source_path, output_path):
         frame_count += 1
 
         # шаг 1: детектор находит фигуры
-        det_results = detector.predict(frame, conf=0.5, verbose=False)[0]
+        boxes, _ = detect_boxes(detector, frame, conf=0.5)
 
-        for box in det_results.boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
+        for box in boxes:
+            x1, y1, x2, y2 = map(int, box)
             crop = frame[max(0,y1):y2, max(0,x1):x2]
 
             if crop.size == 0:
