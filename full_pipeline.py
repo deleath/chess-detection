@@ -9,6 +9,7 @@ from loguru import logger
 from board_state import PIECE_TO_SYMBOL, infer_move, board_to_state
 from stable_detector import StableBoardDetector, sanity_check
 from board_corners import calibrate, load_calibration
+from crop_utils import square, CLS_IMGSZ
 
 DETECTOR_PATH = "models/detector.pt"
 CLASSIFIER_PATH = "models/classifier.pt"
@@ -48,11 +49,9 @@ def detect_board_state(frame, corners):
         if crop.size == 0:
             continue
 
-        cls_results = classifier.predict(crop, verbose=False)[0]
+        cls_results = classifier.predict(square(crop), imgsz=CLS_IMGSZ, verbose=False)[0]
         label = cls_results.names[cls_results.probs.top1]
 
-        # TODO: на части наборов фигур путает тип у короля/ферзя (см. demo_render_2d.py) —
-        # цвет отдельно чинили дообучением, тип пока нет
         cx, cy = (x1 + x2) / 2, y2
         square = pixel_to_square(cx, cy, H)
         square_to_piece[square] = label

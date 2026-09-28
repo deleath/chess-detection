@@ -2,6 +2,7 @@ import cv2
 from ultralytics import YOLO
 from loguru import logger
 import sys
+from crop_utils import square, CLS_IMGSZ
 
 DETECTOR_PATH = "models/detector.pt"
 CLASSIFIER_PATH = "models/classifier.pt"
@@ -36,7 +37,7 @@ def process_video(source_path, output_path):
                 continue
 
             # шаг 2: классификатор определяет тип+цвет
-            cls_results = classifier.predict(crop, verbose=False)[0]
+            cls_results = classifier.predict(square(crop), imgsz=CLS_IMGSZ, verbose=False)[0]
             top1_idx = cls_results.probs.top1
             top1_conf = cls_results.probs.top1conf.item()
             label = cls_results.names[top1_idx]

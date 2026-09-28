@@ -5,6 +5,7 @@ python harvest_crops.py harvest   - собрать кропы + контакт-�
 python harvest_crops.py apply CORRECTIONS.json  - применить разметку цвета, разложить по папкам
 """
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -70,26 +71,54 @@ def harvest():
     print("листов:", (len(meta) + per_sheet - 1) // per_sheet)
 
 
+def typesheets():
+    """листы по классам из harvest/labeled: выбросы (ладья среди королей и т.п.) видно сразу"""
+    per_sheet = SHEET_COLS * SHEET_ROWS
+    for cls_dir in sorted((OUT / "labeled").iterdir()):
+        files = sorted(cls_dir.glob("*.jpg"))
+        for s in range(0, len(files), per_sheet):
+            sheet = np.full((SHEET_ROWS * CELL, SHEET_COLS * CELL, 3), 40, np.uint8)
+            for k, f in enumerate(files[s:s + per_sheet]):
+                r, cc = divmod(k, SHEET_COLS)
+                crop = cv2.imread(str(f))
+                ch, cw = crop.shape[:2]
+                scale = min((CELL - 24) / ch, (CELL - 10) / cw)
+                crop = cv2.resize(crop, (max(1, int(cw * scale)), max(1, int(ch * scale))))
+                y0 = r * CELL + 20
+                x0 = cc * CELL + (CELL - crop.shape[1]) // 2
+                sheet[y0:y0 + crop.shape[0], x0:x0 + crop.shape[1]] = crop
+                cid = f.stem.rsplit("_", 1)[1]
+                cv2.putText(sheet, f"#{cid}", (cc * CELL + 3, r * CELL + 14),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 255), 1)
+            cv2.imwrite(str(OUT / f"types_{cls_dir.name}_{s // per_sheet}.jpg"), sheet,
+                        [cv2.IMWRITE_JPEG_QUALITY, 90])
+    print("листы по классам готовы")
+
+
 def apply(corr_path):
-    """corr_path: json {"black": [id,...], "white": [id,...], "skip": [id,...]} -
-    только те, что расходятся с pred или требуют подтверждения; остальные берём как pred."""
+    """corr_path: json {"black": [id,...], "white": [id,...], "skip": [id,...], "types": {"id": "king"},
+    "labels": {"id": "black-king"}} - только то, что расходится с pred; остальное берём как pred.
+    labels перекрывает всё остальное (полный класс), skip выкидывает кроп."""
     meta = {m["id"]: m for m in json.load(open(OUT / "meta.json"))}
     corr = json.load(open(corr_path))
     black_ids, white_ids, skip_ids = set(corr.get("black", [])), set(corr.get("white", [])), set(corr.get("skip", []))
+    types = {int(k): v for k, v in corr.get("types", {}).items()}
+    labels = {int(k): v for k, v in corr.get("labels", {}).items()}
 
     dest = OUT / "labeled"
+    shutil.rmtree(dest, ignore_errors=True)  # иначе после перепримени остаются старые копии
     n_by_class = {}
     for cid, m in meta.items():
         if cid in skip_ids:
             continue
-        typ = m["pred"].split("-", 1)[1]
+        typ = types.get(cid) or m["pred"].split("-", 1)[1]
         if cid in black_ids:
             color = "black"
         elif cid in white_ids:
             color = "white"
         else:
             color = m["pred"].split("-", 1)[0]  # доверяем модели, если не поправили
-        cls_name = f"{color}-{typ}"
+        cls_name = labels.get(cid) or f"{color}-{typ}"
         d = dest / cls_name
         d.mkdir(parents=True, exist_ok=True)
         img = cv2.imread(str(OUT / "crops" / f"{cid}.jpg"))
@@ -105,3 +134,5 @@ if __name__ == "__main__":
         harvest()
     elif sys.argv[1] == "apply":
         apply(sys.argv[2])
+    elif sys.argv[1] == "typesheets":
+        typesheets()

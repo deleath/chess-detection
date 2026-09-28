@@ -33,3 +33,5 @@ chessred_finetune_cls/
 camera_calibration.json
 calibration_check.jpg
 corners_debug.jpg
+ds_loo_*/
+zoom1.jpg
