@@ -59,6 +59,15 @@ def detect_board_state(frame, corners):
 
     return square_to_piece
 
+def orientation_ok(state):
+    """Белые в среднем ближе к 1-му ряду, чем чёрные. Почти всегда так, пока не дошли до эндшпиля,
+    поэтому годится как проверка порядка углов (a8, h8, h1, a1)."""
+    white = [int(sq[1]) for sq, p in state.items() if p.startswith("white")]
+    black = [int(sq[1]) for sq, p in state.items() if p.startswith("black")]
+    if not white or not black:
+        return True
+    return np.mean(white) < np.mean(black)
+
 def process_turn(board: chess.Board, frame, corners):
     curr_state = detect_board_state(frame, corners)
     move, status = infer_move(curr_state, board)
@@ -139,6 +148,8 @@ def process_video_stream(video_path, corners=None, initial_board=None,
 
     confirmed_moves = []
     frame_num = 0
+    blocked = 0
+    orientation_checked = False
 
     while cap.isOpened():
         ret, frame = cap.read()
@@ -151,9 +162,17 @@ def process_video_stream(video_path, corners=None, initial_board=None,
 
         issues = sanity_check(stable_state)
         if issues:
-            if verbose:
+            blocked += 1
+            # не спамим на каждый кадр, иначе лог нечитаемый
+            if verbose and blocked % 30 == 1:
                 logger.warning(f"Кадр {frame_num}: проблема детекции — {issues}")
             continue
+
+        if not orientation_checked:
+            orientation_checked = True
+            if not orientation_ok(stable_state):
+                logger.warning("Белые фигуры не у первых рядов, похоже углы заданы в неправильном порядке "
+                               "(нужно a8, h8, h1, a1), проверьте через board_corners.py show")
 
         move, status = infer_move(stable_state, board)
 
@@ -170,6 +189,8 @@ def process_video_stream(video_path, corners=None, initial_board=None,
                                 f"(увидено: {stable_state})")
 
     cap.release()
+    if blocked:
+        logger.info(f"sanity_check отбросил кадров: {blocked} из {frame_num}")
     return confirmed_moves, board
 
 if __name__ == "__main__":

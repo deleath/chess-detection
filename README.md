@@ -49,6 +49,18 @@ curl -L -o models/detector.pt https://github.com/deleath/chess-detection/release
 curl -L -o models/classifier.pt https://github.com/deleath/chess-detection/releases/download/v1.0-models/classifier.pt
 ```
 
+## Калибровка углов доски
+
+Один раз для закреплённой камеры. Углы по порядку a8, h8, h1, a1 (по шахматам, не по картинке).
+
+```bash
+python3 board_corners.py pick video.mp4             # клик по углам, нужен дисплей
+python3 board_corners.py set x1,y1,x2,y2,x3,y3,x4,y4   # или числами, без дисплея
+python3 board_corners.py show video.mp4             # рисует сетку 8x8 в calibration_check.jpg, проверить глазами
+```
+
+Сохраняется в `camera_calibration.json`.
+
 ## Инференс
 
 ```bash

@@ -30,3 +30,6 @@ ood_done.flag
 run_ood.out
 harvest/
 chessred_finetune_cls/
+camera_calibration.json
+calibration_check.jpg
+corners_debug.jpg
